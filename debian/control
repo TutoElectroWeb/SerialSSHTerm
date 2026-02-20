@@ -1,0 +1,25 @@
+Source: serial-ssh-term
+Section: utility
+Priority: optional
+Maintainer: M@nu <manu@example.com>
+Build-Depends: debhelper-compat (= 13), cargo, libgtk-4-dev, libadwaita-1-dev, libssl-dev, pkg-config
+Standards-Version: 4.6.0
+Homepage: https://github.com/weedmanu/SerialSSHTerm
+
+Package: serial-ssh-term
+Architecture: amd64
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Terminal professionnel pour connexions série et SSH
+ SerialSSHTerm est une application de terminal unifiée permettant de communiquer
+ avec des appareils via port série ou SSH dans une interface moderne.
+ .
+ Fonctionnalités :
+  - Connexion série configurable (débit, bits, parité, arrêt, flux)
+  - Connexion SSH async avec authentification par mot de passe ou clé
+  - Vérification TOFU des clés hôtes SSH (known_hosts)
+  - Émulation terminal ANSI complète (couleurs, SGR)
+  - Affichage en temps réel avec scrollback configurable
+  - Outils intégrés : calculatrice et convertisseur DEC/HEX/BIN
+  - Sauvegarde des logs en fichier texte
+  - Thèmes (Clair, Sombre, Hacker)
+  - Configuration persistante en JSON

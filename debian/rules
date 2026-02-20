@@ -1,0 +1,29 @@
+#!/usr/bin/make -f
+
+export DH_VERBOSE=1
+export PATH := $(HOME)/.cargo/bin:$(PATH)
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	cargo build --release
+
+override_dh_auto_install:
+	mkdir -p debian/serial-ssh-term/usr/bin
+	mkdir -p debian/serial-ssh-term/usr/share/applications
+	mkdir -p debian/serial-ssh-term/usr/share/icons/hicolor/256x256/apps
+	mkdir -p debian/serial-ssh-term/usr/share/icons/hicolor/scalable/apps
+	
+	# Binary
+	install -m 755 target/release/serial-ssh-term debian/serial-ssh-term/usr/bin/
+	
+	# Desktop entry
+	install -m 644 debian/serial-ssh-term.desktop debian/serial-ssh-term/usr/share/applications/
+	
+	# Icons
+	install -m 644 assets/icon.svg debian/serial-ssh-term/usr/share/icons/hicolor/scalable/apps/serial-ssh-term.svg
+	
+override_dh_auto_clean:
+	cargo clean
+	rm -rf target/

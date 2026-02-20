@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=SerialSSHTerm
+Comment=Terminal professionnel pour connexions série et SSH
+Icon=serial-ssh-term
+Exec=serial-ssh-term
+Categories=Utility;System;Network;
+Keywords=serial;ssh;terminal;port;
+Terminal=false
+StartupNotify=true

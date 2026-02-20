@@ -1,0 +1,10 @@
+serial-ssh-term (1.0.0) focal; urgency=medium
+
+  * Release initial 1.0.0
+  * Support complet série et SSH
+  * Interface GTK4/Libadwaita moderne
+  * Configuration persistante JSON
+  * Thèmes multiples (Clair, Sombre, Hacker)
+  * Sauvegarde des logs
+
+ -- M@nu <manu@example.com>  Fri, 06 Feb 2026 18:00:00 +0100
