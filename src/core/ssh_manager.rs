@@ -27,8 +27,8 @@ use std::time::Duration;
 use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
 use russh::client;
-use russh::keys::{self, HashAlg, PrivateKeyWithHashAlg};
 use russh::keys::known_hosts::{check_known_hosts, learn_known_hosts};
+use russh::keys::{self, HashAlg, PrivateKeyWithHashAlg};
 use russh::{ChannelMsg, Pty};
 
 use super::connection::{Connection, ConnectionEvent, ConnectionState, ConnectionType};
@@ -157,7 +157,9 @@ impl client::Handler for SshClientHandler {
                         .unwrap_or(false);
                     if accepted {
                         if let Err(e) = learn_known_hosts(&host, port, &key) {
-                            log::warn!("SSH: impossible d'enregistrer la clé dans known_hosts : {e}");
+                            log::warn!(
+                                "SSH: impossible d'enregistrer la clé dans known_hosts : {e}"
+                            );
                         } else {
                             log::info!("SSH: clé de {host}:{port} ajoutée à ~/.ssh/known_hosts");
                         }
@@ -259,13 +261,13 @@ impl Connection for SshManager {
                 .await
                 .context("Erreur lors de l'authentification par mot de passe")?,
 
-            SshAuthMethod::KeyFile { private_key_path, passphrase } => {
+            SshAuthMethod::KeyFile {
+                private_key_path,
+                passphrase,
+            } => {
                 let key = keys::load_secret_key(private_key_path, passphrase.as_deref())
                     .context("Impossible de charger la clé privée SSH")?;
-                let key_with_alg = PrivateKeyWithHashAlg::new(
-                    Arc::new(key),
-                    Some(HashAlg::Sha256),
-                );
+                let key_with_alg = PrivateKeyWithHashAlg::new(Arc::new(key), Some(HashAlg::Sha256));
                 handle
                     .authenticate_publickey(&self.config.username, key_with_alg)
                     .await
@@ -275,7 +277,9 @@ impl Connection for SshManager {
 
         if !auth_result.success() {
             self.state = ConnectionState::Disconnected;
-            let _ = handle.disconnect(russh::Disconnect::ByApplication, "", "en").await;
+            let _ = handle
+                .disconnect(russh::Disconnect::ByApplication, "", "en")
+                .await;
             bail!(
                 "Authentification SSH échouée pour {}@{}:{}",
                 self.config.username,
@@ -289,25 +293,39 @@ impl Connection for SshManager {
             Ok(c) => c,
             Err(e) => {
                 self.state = ConnectionState::Disconnected;
-                let _ = handle.disconnect(russh::Disconnect::ByApplication, "", "en").await;
+                let _ = handle
+                    .disconnect(russh::Disconnect::ByApplication, "", "en")
+                    .await;
                 return Err(e).context("Impossible d'ouvrir un canal de session SSH");
             }
         };
 
         if let Err(e) = channel
-            .request_pty(true, "xterm-256color", 220, 50, 0, 0, &[(Pty::ECHO, 1), (Pty::ICANON, 1)])
+            .request_pty(
+                true,
+                "xterm-256color",
+                220,
+                50,
+                0,
+                0,
+                &[(Pty::ECHO, 1), (Pty::ICANON, 1)],
+            )
             .await
         {
             self.state = ConnectionState::Disconnected;
             let _ = channel.close().await;
-            let _ = handle.disconnect(russh::Disconnect::ByApplication, "", "en").await;
+            let _ = handle
+                .disconnect(russh::Disconnect::ByApplication, "", "en")
+                .await;
             return Err(e).context("Impossible d'obtenir un PTY SSH");
         }
 
         if let Err(e) = channel.request_shell(true).await {
             self.state = ConnectionState::Disconnected;
             let _ = channel.close().await;
-            let _ = handle.disconnect(russh::Disconnect::ByApplication, "", "en").await;
+            let _ = handle
+                .disconnect(russh::Disconnect::ByApplication, "", "en")
+                .await;
             return Err(e).context("Impossible de démarrer le shell SSH");
         }
 
@@ -331,7 +349,11 @@ impl Connection for SshManager {
             return Ok(());
         }
 
-        log::info!("Déconnexion SSH de {}:{}...", self.config.host, self.config.port);
+        log::info!(
+            "Déconnexion SSH de {}:{}...",
+            self.config.host,
+            self.config.port
+        );
 
         if let Some(channel) = self.channel.take() {
             let _ = channel.close().await;

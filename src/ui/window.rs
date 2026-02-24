@@ -15,6 +15,7 @@ use tokio::runtime::Runtime;
 use crate::core::connection::{
     spawn_connection_actor, Connection, ConnectionCommand, ConnectionEvent, ConnectionType,
 };
+use crate::core::secrets;
 use crate::core::serial_manager::{SerialConfig, SerialManager};
 use crate::core::settings::{SettingsManager, SshFavorite};
 use crate::core::ssh_manager::{SshAuthMethod, SshConfig, SshManager};
@@ -70,7 +71,7 @@ impl MainWindow {
 
         // Création de la barre de menu (MenuBar)
         let menubar_model = gio::Menu::new();
-        
+
         let file_menu = gio::Menu::new();
         file_menu.append(Some("Sauvegarder les logs"), Some("win.save-logs"));
         file_menu.append(Some("Quitter"), Some("win.close"));
@@ -157,8 +158,14 @@ impl MainWindow {
             main_win
                 .connection_panel
                 .ssh_panel
+                .set_remember_secrets(ssh.remember_secrets);
+            main_win
+                .connection_panel
+                .ssh_panel
                 .set_favorites(&settings.settings().ssh_favorites);
         }
+
+        main_win.load_saved_ssh_secrets();
 
         // Message de bienvenue
         main_win
@@ -363,6 +370,47 @@ impl MainWindow {
                 });
         }
 
+        {
+            let w = win.clone();
+            win.connection_panel
+                .ssh_panel
+                .remember_secrets_check
+                .connect_toggled(move |checkbox| {
+                    let enabled = checkbox.is_active();
+
+                    {
+                        let mut sm = w.settings.borrow_mut();
+                        sm.settings_mut().ssh.remember_secrets = enabled;
+                        if let Err(e) = sm.save() {
+                            log::warn!("Impossible de sauvegarder remember_secrets : {e}");
+                        }
+                    }
+
+                    let sp = &w.connection_panel.ssh_panel;
+                    let host = sp.host();
+                    let port = sp.port();
+                    let username = sp.username();
+                    let key_path = sp.key_path();
+
+                    if !enabled {
+                        if !host.is_empty() && !username.is_empty() {
+                            if let Err(e) = secrets::delete_ssh_password(&host, port, &username) {
+                                log::warn!("Suppression password keyring impossible : {e}");
+                            }
+                            if let Err(e) = secrets::delete_ssh_key_passphrase(
+                                &host, port, &username, &key_path,
+                            ) {
+                                log::warn!("Suppression passphrase keyring impossible : {e}");
+                            }
+                        }
+                        sp.clear_password();
+                        sp.clear_passphrase();
+                    } else {
+                        w.load_saved_ssh_secrets();
+                    }
+                });
+        }
+
         // Case à cocher : arrêt du défilement automatique
         {
             let terminal = win.terminal.text_view.clone();
@@ -486,6 +534,11 @@ impl MainWindow {
             }
         };
 
+        if !self.connection_panel.is_serial_selected() {
+            self.connection_panel.ssh_panel.clear_password();
+            self.connection_panel.ssh_panel.clear_passphrase();
+        }
+
         // Indiquer à l'UI que la connexion est en cours.
         self.header.set_status("Connexion en cours...", false);
         self.terminal.append_system("Connexion en cours...");
@@ -502,62 +555,60 @@ impl MainWindow {
         // Pont async_channel → GTK main loop via GLib timer (20 ms)
         // SOLID : aucune dépendance GTK dans le core.
         let this = self.clone();
-        glib::timeout_add_local(
-            std::time::Duration::from_millis(20),
-            move || {
-                loop {
-                    match event_rx.try_recv() {
-                        Ok(ConnectionEvent::Connected { conn_type, description }) => {
-                            let type_label = match conn_type {
-                                ConnectionType::Serial => "Série",
-                                ConnectionType::Ssh => "SSH",
-                            };
-                            this.connection_panel.set_connected(true);
-                            this.header.set_status(
-                                &format!("Connecté {type_label} — {description}"),
-                                true,
-                            );
-                            this.terminal
-                                .append_system(&format!("Connecté [{type_label}] {description}"));
-                            this.input.grab_focus();
-                        }
-                        Ok(ConnectionEvent::HostKeyUnknown {
-                            host,
-                            key_type,
-                            fingerprint,
+        glib::timeout_add_local(std::time::Duration::from_millis(20), move || {
+            loop {
+                match event_rx.try_recv() {
+                    Ok(ConnectionEvent::Connected {
+                        conn_type,
+                        description,
+                    }) => {
+                        let type_label = match conn_type {
+                            ConnectionType::Serial => "Série",
+                            ConnectionType::Ssh => "SSH",
+                        };
+                        this.connection_panel.set_connected(true);
+                        this.header
+                            .set_status(&format!("Connecté {type_label} — {description}"), true);
+                        this.terminal
+                            .append_system(&format!("Connecté [{type_label}] {description}"));
+                        this.input.grab_focus();
+                    }
+                    Ok(ConnectionEvent::HostKeyUnknown {
+                        host,
+                        key_type,
+                        fingerprint,
+                        is_key_changed,
+                        decision_tx,
+                    }) => {
+                        // Afficher le dialogue de vérification de clé SSH.
+                        // Le timer CONTINUE de tourner pendant que l'utilisateur répond.
+                        show_host_key_dialog(
+                            &this.window,
+                            &host,
+                            &key_type,
+                            &fingerprint,
                             is_key_changed,
                             decision_tx,
-                        }) => {
-                            // Afficher le dialogue de vérification de clé SSH.
-                            // Le timer CONTINUE de tourner pendant que l'utilisateur répond.
-                            show_host_key_dialog(
-                                &this.window,
-                                &host,
-                                &key_type,
-                                &fingerprint,
-                                is_key_changed,
-                                decision_tx,
-                            );
-                        }
-                        Ok(ConnectionEvent::DataReceived(data)) => {
-                            this.terminal.append_ansi(&data);
-                        }
-                        Ok(ConnectionEvent::Error(e)) => {
-                            this.terminal.append_error(&e);
-                            this.handle_disconnect();
-                            return glib::ControlFlow::Break;
-                        }
-                        Err(async_channel::TryRecvError::Empty) => break,
-                        Ok(ConnectionEvent::Disconnected)
-                        | Err(async_channel::TryRecvError::Closed) => {
-                            this.handle_disconnect();
-                            return glib::ControlFlow::Break;
-                        }
+                        );
+                    }
+                    Ok(ConnectionEvent::DataReceived(data)) => {
+                        this.terminal.append_ansi(&data);
+                    }
+                    Ok(ConnectionEvent::Error(e)) => {
+                        this.terminal.append_error(&e);
+                        this.handle_disconnect();
+                        return glib::ControlFlow::Break;
+                    }
+                    Err(async_channel::TryRecvError::Empty) => break,
+                    Ok(ConnectionEvent::Disconnected)
+                    | Err(async_channel::TryRecvError::Closed) => {
+                        this.handle_disconnect();
+                        return glib::ControlFlow::Break;
                     }
                 }
-                glib::ControlFlow::Continue
-            },
-        );
+            }
+            glib::ControlFlow::Continue
+        });
     }
 
     /// Traite la déconnexion — idempotente.
@@ -597,6 +648,45 @@ impl MainWindow {
         self.toast_overlay.add_toast(toast);
     }
 
+    /// Charge les secrets SSH sauvegardés dans le trousseau système.
+    fn load_saved_ssh_secrets(&self) {
+        let sp = &self.connection_panel.ssh_panel;
+        if !sp.remember_secrets() {
+            sp.clear_password();
+            sp.clear_passphrase();
+            return;
+        }
+
+        let host = sp.host();
+        let port = sp.port();
+        let username = sp.username();
+        let key_path = sp.key_path();
+
+        if host.is_empty() || username.is_empty() {
+            sp.clear_password();
+            sp.clear_passphrase();
+            return;
+        }
+
+        if let Some(password) = secrets::load_ssh_password(&host, port, &username) {
+            sp.set_password(&password);
+        } else {
+            sp.clear_password();
+        }
+
+        if key_path.trim().is_empty() {
+            sp.clear_passphrase();
+            return;
+        }
+
+        if let Some(passphrase) =
+            secrets::load_ssh_key_passphrase(&host, port, &username, &key_path)
+        {
+            sp.set_passphrase(&passphrase);
+        } else {
+            sp.clear_passphrase();
+        }
+    }
 
     /// Construit le manager série à partir de l'UI.
     /// La connexion effective est établie par `spawn_connection_actor`.
@@ -642,19 +732,38 @@ impl MainWindow {
         let host = sp.host();
         let port = sp.port();
         let username = sp.username();
-        let password = sp.password();
+        let mut password = sp.password();
+        let mut passphrase = sp.passphrase();
         let key_path = sp.key_path();
 
         if host.is_empty() || username.is_empty() {
             return Err("L'hôte et l'utilisateur sont requis.".to_string());
         }
 
+        let remember_secrets = sp.remember_secrets();
+
+        if remember_secrets {
+            if key_path.trim().is_empty() {
+                if password.trim().is_empty() {
+                    password =
+                        secrets::load_ssh_password(&host, port, &username).unwrap_or_default();
+                }
+            } else if passphrase.trim().is_empty() {
+                passphrase = secrets::load_ssh_key_passphrase(&host, port, &username, &key_path)
+                    .unwrap_or_default();
+            }
+        }
+
         let auth_method = if key_path.is_empty() {
-            SshAuthMethod::Password(password)
+            SshAuthMethod::Password(password.clone())
         } else {
             SshAuthMethod::KeyFile {
                 private_key_path: key_path.clone(),
-                passphrase: None,
+                passphrase: if passphrase.trim().is_empty() {
+                    None
+                } else {
+                    Some(passphrase.clone())
+                },
             }
         };
 
@@ -665,6 +774,25 @@ impl MainWindow {
             auth_method,
             connect_timeout_secs: 10,
         };
+
+        if remember_secrets {
+            if key_path.trim().is_empty() {
+                if let Err(e) = secrets::save_ssh_password(&host, port, &username, &password) {
+                    log::warn!("Impossible de sauvegarder le mot de passe dans le keyring : {e}");
+                }
+            } else if let Err(e) =
+                secrets::save_ssh_key_passphrase(&host, port, &username, &key_path, &passphrase)
+            {
+                log::warn!("Impossible de sauvegarder la passphrase dans le keyring : {e}");
+            }
+        } else if key_path.trim().is_empty() {
+            if let Err(e) = secrets::delete_ssh_password(&host, port, &username) {
+                log::warn!("Suppression password keyring impossible : {e}");
+            }
+        } else if let Err(e) = secrets::delete_ssh_key_passphrase(&host, port, &username, &key_path)
+        {
+            log::warn!("Suppression passphrase keyring impossible : {e}");
+        }
 
         // Sauvegarder les paramètres SSH
         {
@@ -679,6 +807,7 @@ impl MainWindow {
                 "key".to_string()
             };
             ssh.key_path = key_path;
+            ssh.remember_secrets = remember_secrets;
             if let Err(e) = sm.save() {
                 log::warn!("Impossible de sauvegarder les paramètres SSH : {e}");
             }
@@ -756,7 +885,7 @@ impl MainWindow {
             &favorite.username,
             &favorite.key_path,
         );
-        self.connection_panel.ssh_panel.clear_password();
+        self.load_saved_ssh_secrets();
 
         self.terminal
             .append_system(&format!("Favori SSH chargé : {}", favorite.name));
@@ -800,6 +929,8 @@ impl MainWindow {
             return;
         }
 
+        let timestamp_saved_lines = self.settings.borrow().settings().log.timestamp_saved_lines;
+
         let dialog = FileDialog::builder()
             .title("Sauvegarder les logs")
             .initial_name(format!(
@@ -823,13 +954,30 @@ impl MainWindow {
                             false,
                         )
                         .to_string();
-                    match std::fs::write(&path, &content) {
+                    let output = if timestamp_saved_lines {
+                        content
+                            .lines()
+                            .map(|line| {
+                                format!(
+                                    "[{}] {}",
+                                    chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
+                                    line
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    } else {
+                        content
+                    };
+
+                    match std::fs::write(&path, &output) {
                         Ok(()) => {
                             log::info!("Logs sauvegardés dans {}", path.display());
                             // Toast de confirmation non-bloquant
-                            let toast = libadwaita::Toast::new(
-                                &format!("✓ Logs sauvegardés : {}", path.display())
-                            );
+                            let toast = libadwaita::Toast::new(&format!(
+                                "✓ Logs sauvegardés : {}",
+                                path.display()
+                            ));
                             toast.set_timeout(4);
                             toast_overlay.add_toast(toast);
                             let msg = format!(

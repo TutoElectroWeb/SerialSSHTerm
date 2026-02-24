@@ -5,8 +5,8 @@
 
 use gtk4::prelude::*;
 use gtk4::{
-    Box as GtkBox, Button, DropDown, Entry, Label, Notebook, Orientation, PasswordEntry,
-    SpinButton, StringList,
+    Box as GtkBox, Button, CheckButton, DropDown, Entry, Label, Notebook, Orientation,
+    PasswordEntry, SpinButton, StringList,
 };
 
 use crate::core::serial_manager::list_serial_ports;
@@ -267,7 +267,8 @@ impl SerialPanel {
         let entries = self.port_entries.borrow();
         for (idx, entry) in entries.iter().enumerate() {
             if entry.device == device {
-                self.port_dropdown.set_selected(u32::try_from(idx).unwrap_or(u32::MAX));
+                self.port_dropdown
+                    .set_selected(u32::try_from(idx).unwrap_or(u32::MAX));
                 return;
             }
         }
@@ -303,6 +304,8 @@ pub struct SshPanel {
     pub port_spin: SpinButton,
     pub username_entry: Entry,
     pub password_entry: PasswordEntry,
+    pub passphrase_entry: PasswordEntry,
+    pub remember_secrets_check: CheckButton,
     pub key_path_entry: Entry,
     pub key_browse_button: Button,
     favorite_model: StringList,
@@ -361,6 +364,18 @@ impl SshPanel {
             .show_peek_icon(true)
             .build();
 
+        let passphrase_label = Label::new(Some("Passphrase :"));
+        let passphrase_entry = PasswordEntry::builder()
+            .placeholder_text("Passphrase clé (optionnel)")
+            .show_peek_icon(true)
+            .build();
+
+        let remember_secrets_check = CheckButton::builder()
+            .label("Mémoriser secrets")
+            .active(true)
+            .tooltip_text("Stocker les secrets SSH dans le trousseau système")
+            .build();
+
         // Clé SSH
         let key_label = Label::new(Some("Clé :"));
         let key_path_entry = Entry::builder()
@@ -395,6 +410,9 @@ impl SshPanel {
         container.append(&username_entry);
         container.append(&pass_label);
         container.append(&password_entry);
+        container.append(&passphrase_label);
+        container.append(&passphrase_entry);
+        container.append(&remember_secrets_check);
 
         let sep3 = gtk4::Separator::new(Orientation::Vertical);
         container.append(&sep3);
@@ -411,6 +429,8 @@ impl SshPanel {
             port_spin,
             username_entry,
             password_entry,
+            passphrase_entry,
+            remember_secrets_check,
             key_path_entry,
             key_browse_button,
             favorite_model,
@@ -440,6 +460,11 @@ impl SshPanel {
         self.password_entry.text().to_string()
     }
 
+    /// Retourne la passphrase de la clé SSH.
+    pub fn passphrase(&self) -> String {
+        self.passphrase_entry.text().to_string()
+    }
+
     /// Retourne le chemin de la clé SSH.
     pub fn key_path(&self) -> String {
         self.key_path_entry.text().to_string()
@@ -448,6 +473,31 @@ impl SshPanel {
     /// Efface le mot de passe affiché (sécurité UX).
     pub fn clear_password(&self) {
         self.password_entry.set_text("");
+    }
+
+    /// Définit le mot de passe affiché.
+    pub fn set_password(&self, value: &str) {
+        self.password_entry.set_text(value);
+    }
+
+    /// Efface la passphrase affichée (sécurité UX).
+    pub fn clear_passphrase(&self) {
+        self.passphrase_entry.set_text("");
+    }
+
+    /// Définit la passphrase affichée.
+    pub fn set_passphrase(&self, value: &str) {
+        self.passphrase_entry.set_text(value);
+    }
+
+    /// Retourne si la mémorisation des secrets est activée.
+    pub fn remember_secrets(&self) -> bool {
+        self.remember_secrets_check.is_active()
+    }
+
+    /// Active/désactive la mémorisation des secrets.
+    pub fn set_remember_secrets(&self, enabled: bool) {
+        self.remember_secrets_check.set_active(enabled);
     }
 
     /// Applique les paramètres SSH à l'UI.

@@ -1,6 +1,6 @@
-# Guide Complet du Packaging Debian
+# Guide Complet du Packaging (Debian + Windows)
 
-Ce document décrit en détail le processus de création et de distribution du paquet Debian pour SerialSSHTerm.
+Ce document décrit en détail le processus de création et de distribution des artefacts Debian et Windows pour SerialSSHTerm.
 
 ## Structure de packaging
 
@@ -37,7 +37,7 @@ Il détecte la distribution Linux et installe :
 - **Build tools** : build-essential, debhelper
 - **Rust** : via rustup (si absent)
 - **GTK4/Libadwaita** : dev packages
-- **SSH** : libssh2-dev
+- **SSH** : libssl-dev (requis par `russh`)
 - **Outils** : pkg-config
 
 ### 2. Compilation
@@ -158,7 +158,7 @@ Lance `serial-ssh-term` via :
 libc6           ≥ 2.31      - Bibliothèque standard C
 libgtk-4-1      ≥ 4.0       - Framework UI
 libadwaita-1    ≥ 0.7       - Design system
-libssh2-1       ≥ 1.9       - Connexions SSH
+libssl3         ≥ 3.x       - TLS/crypto requis pour SSH (via Rustls/OpenSSL stack)
 ```
 
 ### Build (install-deps.sh)
@@ -167,7 +167,7 @@ libssh2-1       ≥ 1.9       - Connexions SSH
 rustc, cargo    ≥ 1.70      - Compilateur Rust
 libgtk-4-dev                - Headers GTK4
 libadwaita-1-dev            - Headers Libadwaita
-libssh2-1-dev               - Headers SSH
+libssl-dev                  - Headers crypto/TLS
 pkg-config                  - Détection de libs
 build-essential             - Compilateur C
 debhelper, devscripts       - Outils Debian
@@ -261,3 +261,37 @@ dch -i  # Incrémente auto dans debian/changelog
 - [debhelper](https://manpages.debian.org/debhelper)
 - [Cargo Debian integration](https://rust-lang.org/what/wg-cargo/)
 - [FDO Desktop Entry Spec](https://specifications.freedesktop.org/desktop-entry-spec/latest/)
+
+---
+
+## Packaging Windows (.exe)
+
+Le projet fournit un flux équivalent à Debian pour Windows 11.
+
+### Scripts fournis
+
+- `install-deps-windows.ps1` : installe Rust + MSYS2 + toolchain GTK4/libadwaita.
+- `build-exe.ps1` : compile l'application et prépare une distribution ZIP.
+
+### Processus recommandé
+
+Dans PowerShell (Windows 11) :
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install-deps-windows.ps1
+powershell -ExecutionPolicy Bypass -File .\build-exe.ps1 -IncludeGtkRuntime
+winget install JRSoftware.InnoSetup
+powershell -ExecutionPolicy Bypass -File .\build-installer.ps1 -IncludeGtkRuntime
+```
+
+### Artefacts générés
+
+- `dist/windows/SerialSSHTerm/serial-ssh-term.exe`
+- `dist/windows/serial-ssh-term-win64-release.zip`
+- `dist/windows/installer/serial-ssh-term-setup-win64-v<version>.exe`
+
+### Notes importantes
+
+- Le flag `-IncludeGtkRuntime` copie les DLL GTK depuis `C:\msys64\mingw64\bin`.
+- Sans ce flag, l'exécutable dépend d'un runtime GTK installé sur la machine cible.
+- Pour un packaging MSI/Setup, ce ZIP peut ensuite être encapsulé avec Inno Setup ou WiX.

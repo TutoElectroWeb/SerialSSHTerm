@@ -163,9 +163,7 @@ pub fn spawn_connection_actor(
                     .await;
             }
             Err(e) => {
-                let _ = event_tx
-                    .send(ConnectionEvent::Error(e.to_string()))
-                    .await;
+                let _ = event_tx.send(ConnectionEvent::Error(e.to_string())).await;
                 return; // N'entre pas dans la boucle I/O
             }
         }

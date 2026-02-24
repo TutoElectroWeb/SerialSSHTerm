@@ -1,0 +1,6 @@
+[advisories]
+ignore = [
+    # Transitif via russh/rsa : pas de correctif upstream disponible à date.
+    # Risque accepté temporairement pour un client desktop en attendant un patch amont.
+    "RUSTSEC-2023-0071",
+]

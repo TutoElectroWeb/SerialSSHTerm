@@ -38,7 +38,8 @@ meval = "0.2"
 tokio-serial = "5.4.5"
 async-channel = "2.5.0"
 async-trait = "0.1.89"
-russh = "0.55.0"
+russh = "0.57"
+keyring = "3"
 vte = { version = "0.15.0", features = ["ansi"] }
 
 [profile.release]

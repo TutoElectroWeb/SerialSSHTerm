@@ -1,5 +1,7 @@
 # SerialSSHTerm
 
+Langue : **Français** | [English](README.en.md)
+
 Un terminal professionnel pour connexions série et SSH, écrit en **Rust** avec **GTK4** et **Libadwaita**.
 
 ## 🎯 À propos
@@ -13,6 +15,7 @@ SerialSSHTerm est une application de terminal unifiée permettant de communiquer
 - 💾 **Sauvegarde des logs** en fichier texte
 - 🎨 **Thèmes** (Clair, Sombre, Hacker)
 - ⚙️ **Configuration persistante** en JSON
+- 🔐 **Secrets SSH stockés dans le trousseau système** (Secret Service Linux / Credential Manager Windows)
 - 🔔 **Notifications toast** Adwaita non-bloquantes
 - 🧮 **Outils intégrés** : calculatrice et convertisseur DEC/HEX/BIN
 
@@ -34,6 +37,30 @@ sudo dpkg -i ../serial-ssh-term_1.0.0*.deb
 ```
 
 Le paquet inclut l'icône, l'entrée de menu, et la configuration système.
+
+### Option 1 bis : Build Windows (.exe)
+
+Depuis Windows 11 (PowerShell) :
+
+```powershell
+# 1) Installer les dépendances (Rust + MSYS2 + GTK4/libadwaita)
+powershell -ExecutionPolicy Bypass -File .\install-deps-windows.ps1
+
+# 2) Générer l'exe + archive ZIP distributable
+powershell -ExecutionPolicy Bypass -File .\build-exe.ps1 -IncludeGtkRuntime
+
+# 3) Installer Inno Setup (une fois)
+winget install JRSoftware.InnoSetup
+
+# 4) Générer un installateur Windows (.exe)
+powershell -ExecutionPolicy Bypass -File .\build-installer.ps1 -IncludeGtkRuntime
+```
+
+Artefacts générés :
+
+- `dist/windows/SerialSSHTerm/serial-ssh-term.exe`
+- `dist/windows/serial-ssh-term-win64-release.zip`
+- `dist/windows/installer/serial-ssh-term-setup-win64-v<version>.exe`
 
 ### Option 2 : Installation depuis la source
 
@@ -103,8 +130,9 @@ cargo run
 3. Choisissez l'authentification :
    - **Mot de passe** : saisissez-le directement
    - **Clé privée** : parcourez vers `~/.ssh/id_rsa`
-4. Cliquez **Se connecter**
-5. Si le serveur est inconnu, une dialogue TOFU s'affiche pour confirmer l'empreinte de la clé hôte. En cas de changement de clé détecté, un avertissement MITM est affiché.
+4. Activez/désactivez **Mémoriser secrets** selon votre politique sécurité
+5. Cliquez **Se connecter**
+6. Si le serveur est inconnu, un dialogue TOFU s'affiche pour confirmer l'empreinte de la clé hôte. En cas de changement de clé détecté, un avertissement MITM est affiché.
 
 ### Raccourcis clavier
 
@@ -125,8 +153,12 @@ Elle inclut :
 - Derniers paramètres de connexion (série / SSH)
 - Thème actif
 - Taille de la fenêtre
-- Límite de scrollback
+- Limite de scrollback
 - Fin de ligne (LF / CR / CRLF)
+
+Les secrets (mot de passe SSH, passphrase de clé) ne sont pas écrits dans `settings.json`.
+Ils sont enregistrés dans le trousseau système de l'OS.
+Le paramètre `remember_secrets` (booléen) pilote cette mémorisation.
 
 ## 🛠️ Architecture
 
@@ -206,7 +238,10 @@ debian/
 assets/
 └── icon.svg          # Icône de l'application
 build-deb.sh         # Script de création du .deb
+build-exe.ps1        # Script de création du .exe (Windows)
+build-installer.ps1  # Script de création de l'installateur Windows (.exe)
 install-deps.sh      # Script d'installation des dépendances
+install-deps-windows.ps1  # Dépendances Windows (Rust + MSYS2 + GTK)
 ```
 
 ### Créer le paquet
@@ -283,6 +318,7 @@ Cela relance le service d'accessibilité et supprime le message. L'application f
 | `chrono`               | Timestamps                        |
 | `log` / `env_logger`   | Logging                           |
 | `anyhow`               | Gestion d'erreurs                 |
+| `keyring`              | Trousseau système (secrets SSH)   |
 | `dirs`                 | Répertoires XDG                   |
 | `meval`                | Évaluation d'expressions (outils) |
 

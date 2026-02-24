@@ -58,6 +58,8 @@ pub struct SshSettings {
     pub username: String,
     pub auth_method: String, // "password" | "key"
     pub key_path: String,
+    #[serde(default = "default_true")]
+    pub remember_secrets: bool,
 }
 
 /// Paramètres d'interface utilisateur.
@@ -82,6 +84,12 @@ pub struct LogSettings {
     pub level: String,
     pub log_to_file: bool,
     pub log_directory: String,
+    #[serde(default = "default_true")]
+    pub timestamp_saved_lines: bool,
+}
+
+const fn default_true() -> bool {
+    true
 }
 
 // =============================================================================
@@ -110,6 +118,7 @@ impl Default for SshSettings {
             username: String::new(),
             auth_method: "password".to_string(),
             key_path: String::new(),
+            remember_secrets: true,
         }
     }
 }
@@ -149,6 +158,7 @@ impl Default for LogSettings {
             level: "INFO".to_string(),
             log_to_file: false,
             log_directory: "logs".to_string(),
+            timestamp_saved_lines: true,
         }
     }
 }

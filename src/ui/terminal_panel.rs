@@ -7,7 +7,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use gtk4::prelude::*;
-use gtk4::{ScrolledWindow, TextBuffer, TextTagTable, TextView, TextTag};
+use gtk4::{ScrolledWindow, TextBuffer, TextTag, TextTagTable, TextView};
 use vte::{Parser, Perform};
 
 /// Panneau d'affichage du terminal.
@@ -80,7 +80,8 @@ impl AnsiPerformer {
                 .filter_map(|name| tag_table.lookup(name))
                 .collect();
             let tags_refs: Vec<&TextTag> = tags.iter().collect();
-            self.buffer.insert_with_tags(&mut end_iter, &self.pending_text, &tags_refs);
+            self.buffer
+                .insert_with_tags(&mut end_iter, &self.pending_text, &tags_refs);
         }
 
         self.pending_text.clear();
@@ -101,12 +102,19 @@ impl Perform for AnsiPerformer {
         }
     }
 
-    fn hook(&mut self, _params: &vte::Params, _intermediates: &[u8], _ignore: bool, _action: char) {}
+    fn hook(&mut self, _params: &vte::Params, _intermediates: &[u8], _ignore: bool, _action: char) {
+    }
     fn put(&mut self, _byte: u8) {}
     fn unhook(&mut self) {}
     fn osc_dispatch(&mut self, _params: &[&[u8]], _bell_terminated: bool) {}
 
-    fn csi_dispatch(&mut self, params: &vte::Params, _intermediates: &[u8], _ignore: bool, action: char) {
+    fn csi_dispatch(
+        &mut self,
+        params: &vte::Params,
+        _intermediates: &[u8],
+        _ignore: bool,
+        action: char,
+    ) {
         if action == 'm' {
             self.flush();
             let mut has_params = false;
@@ -184,8 +192,10 @@ impl TerminalPanel {
 
         // Tags ANSI
         let colors = [
-            "#000000", "#CD0000", "#00CD00", "#CDCD00", "#0000EE", "#CD00CD", "#00CDCD", "#E5E5E5", // 0-7
-            "#7F7F7F", "#FF0000", "#00FF00", "#FFFF00", "#5C5CFF", "#FF00FF", "#00FFFF", "#FFFFFF", // 8-15
+            "#000000", "#CD0000", "#00CD00", "#CDCD00", "#0000EE", "#CD00CD", "#00CDCD",
+            "#E5E5E5", // 0-7
+            "#7F7F7F", "#FF0000", "#00FF00", "#FFFF00", "#5C5CFF", "#FF00FF", "#00FFFF",
+            "#FFFFFF", // 8-15
         ];
         for (i, color) in colors.iter().enumerate() {
             let fg_tag = gtk4::TextTag::builder()
@@ -201,10 +211,7 @@ impl TerminalPanel {
             tag_table.add(&bg_tag);
         }
 
-        let bold_tag = gtk4::TextTag::builder()
-            .name("bold")
-            .weight(700)
-            .build();
+        let bold_tag = gtk4::TextTag::builder().name("bold").weight(700).build();
         tag_table.add(&bold_tag);
 
         let italic_tag = gtk4::TextTag::builder()
@@ -262,7 +269,7 @@ impl TerminalPanel {
     pub fn append_ansi(&self, data: &[u8]) {
         let mut parser = self.ansi_parser.borrow_mut();
         let mut performer = self.ansi_performer.borrow_mut();
-        
+
         parser.advance(&mut *performer, data);
         performer.flush();
 
