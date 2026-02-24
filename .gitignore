@@ -17,3 +17,4 @@ debian/*.substvars
 ../*.tar.xz
 ../*.buildinfo
 ../*.changes
+audit.txt
